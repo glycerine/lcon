@@ -21,6 +21,7 @@ type buffer struct {
 	r, w   int
 	closed bool
 	err    error // err to return to reader
+	late   bool
 }
 
 var (
@@ -47,9 +48,16 @@ func (b *buffer) Len() int {
 	return b.w - b.r
 }
 
+func (b *buffer) freeBytes() int {
+	return len(b.buf) - b.w
+}
+
 // Write copies bytes from p into the buffer.
 // It is an error to write more data than the buffer can hold.
 func (b *buffer) Write(p []byte) (n int, err error) {
+	if b.late {
+		return 0, ErrDeadline
+	}
 	if b.closed {
 		return 0, errWriteClosed
 	}

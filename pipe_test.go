@@ -13,13 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"runtime"
 	"testing"
 	"time"
 )
 
 func TestPipeClose(t *testing.T) {
 	var p Pipe
-	p.c.L = &p.m
+	p.rc.L = &p.rm
 	a := errors.New("a")
 	b := errors.New("b")
 	p.SetErrorAndClose(a)
@@ -145,4 +146,110 @@ func TestPipeAsNetConn(t *testing.T) {
 		t.Errorf(fmt.Errorf("msg corrupted, wrote '%v', read '%v'", msg3, got).Error())
 	}
 	//fmt.Printf("\n got = '%s'\n", got)
+
+}
+
+func TestReadDeadlinesWork(t *testing.T) {
+
+	var nc net.Conn = NewPipe(make([]byte, 100))
+
+	// deadlines should work
+	readbuf4 := make([]byte, 100)
+
+	timeout := 50 * time.Millisecond
+	err := nc.SetReadDeadline(time.Now().Add(timeout))
+	if err != nil {
+		t.Fatalf("must be able to SetReadDeadline")
+	}
+	deadlineFired, checkDone := make(chan bool), make(chan bool)
+	go func() {
+		select {
+		case <-time.After(6 * timeout):
+
+			buf := make([]byte, 1<<20)
+			stacklen := runtime.Stack(buf, true)
+			fmt.Printf("\n%s\n\n", buf[:stacklen])
+
+			panic(fmt.Sprintf("%v deadline didn't fire after %v",
+				timeout, 6*timeout))
+		case <-deadlineFired:
+			close(checkDone)
+		}
+	}()
+
+	t0 := time.Now()
+	_, err = nc.Read(readbuf4)
+	elap := time.Since(t0)
+	close(deadlineFired)
+	<-checkDone
+	if err == nil {
+		t.Fatalf("Read beyond deadline should have returned an error")
+	}
+	if elap < timeout {
+		t.Fatalf("Read returned before deadline timeout")
+	}
+	fmt.Printf("good, err = '%v' after %s.\n", err, elap)
+
+	// and should be able to read successfully after timeout:
+	msg := []byte("jabber")
+	_, err = nc.Write(msg)
+	if err != nil {
+		t.Fatalf("should have been able to write")
+	}
+	nr, err := nc.Read(readbuf4)
+	if nr != len(msg) {
+		t.Fatalf("should have been able to read all of msg")
+	}
+	if err != nil {
+		t.Fatalf("should have been able to read after previous read-deadline timeout: '%s'", err)
+	}
+}
+
+func TestWriteDeadlinesWork(t *testing.T) {
+
+	var nc net.Conn = NewPipe(make([]byte, 10))
+
+	// deadlines should work, trying to write more
+	// than we have space for...
+	writebuf := make([]byte, 100)
+
+	timeout := 50 * time.Millisecond
+	err := nc.SetWriteDeadline(time.Now().Add(timeout))
+	if err != nil {
+		t.Fatalf("must be able to SetWriteDeadline")
+	}
+	deadlineFired, checkDone := make(chan bool), make(chan bool)
+	go func() {
+		select {
+		case <-time.After(6 * timeout):
+
+			buf := make([]byte, 1<<20)
+			stacklen := runtime.Stack(buf, true)
+			fmt.Printf("\n%s\n\n", buf[:stacklen])
+
+			panic(fmt.Sprintf("%v deadline didn't fire after %v",
+				timeout, 6*timeout))
+		case <-deadlineFired:
+			close(checkDone)
+		}
+	}()
+
+	t0 := time.Now()
+	_, err = nc.Write(writebuf)
+	elap := time.Since(t0)
+	close(deadlineFired)
+	<-checkDone
+	if err == nil {
+		t.Fatalf("Write beyond deadline should have returned an error")
+	}
+	if elap < timeout {
+		t.Fatalf("Write returned before deadline timeout")
+	}
+	fmt.Printf("good, err = '%v' after %s.\n", err, elap)
+
+	// should be able to write small ok...
+	_, err = nc.Write(writebuf[:5])
+	if err != nil {
+		t.Fatalf("small write of 5 to a capacity 10 buffer should work fine: '%s'", err)
+	}
 }
