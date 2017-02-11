@@ -11,7 +11,7 @@ import (
 )
 
 // Bidir emulates a TCP connection
-// entire in memory, providing
+// entirely in memory, providing
 // bi-directional buffering.
 type Bidir struct {
 	Send *Pipe
