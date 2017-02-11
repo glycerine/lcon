@@ -7,7 +7,6 @@
 // Licensed under the same terms as Go itself:
 // https://code.google.com/p/go/source/browse/LICENSE
 
-// package pipe gives a local in-memory net.Conn
 package lcon
 
 import (
