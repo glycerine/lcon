@@ -1,3 +1,8 @@
+// package lcon gives a local in-memory net.Conn
+// that can be used to simulate a TCP connection.
+// It uses bounded buffers in both directions,
+// so writers will be blocked until readers
+// make progress, and vice-versa.
 package lcon
 
 import (
