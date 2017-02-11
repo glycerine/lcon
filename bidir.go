@@ -5,19 +5,31 @@ import (
 	"time"
 )
 
+// Bidir emulates a TCP connection
+// entire in memory, providing
+// bi-directional buffering.
 type Bidir struct {
 	Send *Pipe
 	Recv *Pipe
 }
 
-func NewBidir(sz int) *Bidir {
+// NewBidir returns a pair of Bidir,
+// each of which can be treated as
+// a net.Conn in order to communicate
+// over memory buffers.
+func NewBidir(sz int) (*Bidir, *Bidir) {
 	s := make([]byte, sz)
 	r := make([]byte, sz)
 
+	sp := NewPipe(s)
+	rp := NewPipe(r)
 	return &Bidir{
-		Send: NewPipe(s),
-		Recv: NewPipe(r),
-	}
+			Send: sp,
+			Recv: rp,
+		}, &Bidir{
+			Send: rp,
+			Recv: sp,
+		}
 }
 
 func (r *Bidir) Read(p []byte) (n int, err error) {
